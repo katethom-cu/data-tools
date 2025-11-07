@@ -3,6 +3,10 @@ import numpy as np
 import pandas as pd
 from style import MARKERS, LINE_COLOURS
 
+plt.rc("text", usetex=True)
+plt.rc("text.latex", preamble=r"\usepackage{mhchem}")
+
+
 
 def read_ascii(filename):
     with open(filename, "r") as f:
@@ -32,7 +36,7 @@ class Compound:
         return ax.scatter(
             self.peak_theta2,
             self.peak_intensity + max * peak_label_offset,
-            label=self.name,
+            label=f"\\ce{{{self.name.replace(" ", "")}}}",
             marker=marker,
             color="black",
         )
@@ -53,13 +57,13 @@ class XRDSample:
 
         compounds = []
 
-        for _, row in meta["info"][["Compound Name", "Ref. Code"]].iterrows():
-            name = row["Compound Name"]
+        for _, row in meta["info"][["Chemical Formula", "Ref. Code"]].iterrows():
+            name = row["Chemical Formula"]
             ref = row["Ref. Code"]
 
             sample_peaks = meta["sample"]
             matched_peak_positions = np.array(
-                sample_peaks[sample_peaks["Matched by"] == ref]["Pos. [°2Th.]"]
+                sample_peaks[sample_peaks["Matched by"].str.contains(ref, na=False)]["Pos. [°2Th.]"]
             )
             indices = [
                 np.abs(theta2 - peak).argmin() for peak in matched_peak_positions
@@ -120,7 +124,8 @@ def xrd_multiplot(
     samples: dict[str, XRDSample],
     title: str | None = None,
     margin: float = 0.1,
-    peak_label_offset: float = 0.03,
+    peak_label_offset: float = 0.01,
+    peak_label_gap: float = 0.04
 ):
     spacing = 1 + margin
 
@@ -134,6 +139,7 @@ def xrd_multiplot(
     max_intensity = np.max([sample.max_intensity() for sample in samples.values()])
 
     abs_peak_offset = peak_label_offset * max_intensity
+    margin = peak_label_gap * max_intensity
 
     # plotting lines
 
@@ -174,16 +180,23 @@ def xrd_multiplot(
             )
 
     # plotting compounds
-    scatter = [
-        ax.scatter(
+    # there's probably a pretty functional way of doing this. I do not know it
+    scatter = []
+    ive_lost_the_plot = []
+    for i, (name, value) in enumerate(compounds.items()):
+        for angle in value["theta2"]:
+            ive_lost_the_plot.append(angle)
+
+        intensities_offest = [
+            intensity + margin * ive_lost_the_plot.count(angle)
+            for angle, intensity in zip(value["theta2"], value["intensity"])]
+        scatter.append(ax.scatter(
             value["theta2"],
-            value["intensity"] + abs_peak_offset,
-            label=name,
+            intensities_offest + abs_peak_offset,
+            label=f"\\ce{{{name.replace(" ", "")}}}",
             color="black",
             marker=MARKERS[i],
             zorder=2,
-        )
-        for i, (name, value) in enumerate(compounds.items())
-    ]
+        ))
 
     ax.legend(handles=scatter, loc="upper right")

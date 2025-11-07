@@ -1,8 +1,8 @@
 from catpuccin import LATTE, FRAPPE
 
-COLOUR_THEME = FRAPPE
+COLOUR_THEME = LATTE
 
-MARKERS = ("v", "s", "p", "*")
+MARKERS = ("v", "s", "p", "*", "1", "8", "P")
 LINE_COLOURS = (
     COLOUR_THEME["maroon"]["hex"],
     COLOUR_THEME["mauve"]["hex"],

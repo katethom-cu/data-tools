@@ -20,6 +20,15 @@ def temperature_correct_f(temp, f_sample, f_correction_mode):
 
 # Cuenca
 MODE_VOLUMES = {
+    # saruman?
+    "TM010": 0.294,
+    "TM011": 0.962,
+    "TM020": 0.124,
+    "TM021": 0.183,
+    "TM012": 2.580,
+    "TM022": 0.332,
+
+    # gandalf
     "TM110": 0.388,
     "TE011": 0.271,
     "TE021": 0.108,
@@ -27,7 +36,10 @@ MODE_VOLUMES = {
     "TE022": 0.162,
 }
 
-CAVITY_SQUARED_RADII = {"Gandalf": 0.046**2}
+CAVITY_SQUARED_RADII = {
+    "Gandalf": 0.046**2,
+    "Saruman": 0.0475**2
+}
 
 
 class PermResult:
@@ -35,14 +47,20 @@ class PermResult:
         self.data = data
         self.fn = fn
         self.coeff = coeff
+        self.mean = np.mean(data)
+        self.max = np.max(data)
+        self.min = np.min(data)
 
 
 class CavityPerturbationResult:
-    def __init__(self, real: PermResult, imag: PermResult, temperature, mean_f) -> None:
+    def __init__(self, real: PermResult, imag: PermResult, temperature, mean_f,
+                 f_shift, q_shift) -> None:
         self.imag = imag
         self.real = real
         self.temperature = temperature
         self.mean_f = mean_f
+        self.f_shift = f_shift
+        self.q_shift = q_shift
 
     def plot(self, title):
         _, ax = plt.subplots()
@@ -78,7 +96,7 @@ class CavityPerturbationResult:
 
 
 def analyse(
-    sample_tdms_file, empty_tdms_file, cavity_volume, sample_volume
+    sample_tdms_file, empty_tdms_file, cavity_volume, sample_volume, temp_correct=True
 ) -> dict[str, CavityPerturbationResult]:
 
     sample_modes = []
@@ -110,8 +128,9 @@ def analyse(
         f_corrected = temperature_correct_f(temperature, f, f_correction_mode)
 
         sample_real_perm = real_perm(
-            mode_volume, cavity_volume, sample_volume, empty_f0, f_corrected
-        )
+            mode_volume, cavity_volume, sample_volume, empty_f0,
+            f_corrected if temp_correct else f)
+
         sample_imag_perm = imag_perm(
             mode_volume, cavity_volume, sample_volume, empty_q0, q
         )
@@ -126,6 +145,8 @@ def analyse(
             PermResult(sample_imag_perm, imag_perm_fn, imag_perm_coeff),
             temperature,
             np.mean(f),
+            (empty_f0 - f) / empty_f0,
+            (1 / q) - (1 / empty_q0),
         )
 
     return results
