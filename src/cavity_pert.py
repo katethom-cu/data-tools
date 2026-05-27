@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import re
+from dataclasses import dataclass
+
+from pandas.io.formats.format import math
 
 
 def real_perm(g, vc, vs, f0, fs):
@@ -17,29 +20,48 @@ def temperature_correct_f(temp, f_sample, f_correction_mode):
     min_index = np.argmin(temp)
     return f_sample / (f_correction_mode / f_correction_mode[min_index])
 
+@dataclass
+class CavityData:
+    radius: float 
+    height: float
+    modes: dict[str, int]
 
-# Cuenca
-MODE_VOLUMES = {
-    # saruman?
-    "TM010": 0.294,
-    "TM011": 0.962,
-    "TM020": 0.124,
-    "TM021": 0.183,
-    "TM012": 2.580,
-    "TM022": 0.332,
+    def volume(self):
+        return self.height*math.pi*self.radius**2
 
-    # gandalf
-    "TM110": 0.388,
-    "TE011": 0.271,
-    "TE021": 0.108,
-    "TE012": 0.598,
-    "TE022": 0.162,
-}
+    def sample_volume(self, sample_radius):
+        return self.height*math.pi*(sample_radius**2)
 
-CAVITY_SQUARED_RADII = {
-    "Gandalf": 0.046**2,
-    "Saruman": 0.0475**2
-}
+@dataclass
+class Cavities:
+    # eps-cav, from Jerome's thesis.
+    GANDALF = CavityData(
+        radius=0.046,
+        height=0.04,
+        modes={"TM010": 0.294,
+        "TM011": 0.962,
+        "TM020": 0.124,
+        "TM021": 0.183,
+        "TM012": 2.580,
+        "TM022": 0.332}
+    )
+
+    # mu-cav, from Jerome's thesis.
+    SARUMAN = CavityData(
+        radius=0.0475,
+        height=0.04,
+        modes={"TM110": 0.388,
+        "TE011": 0.285,
+        "TE021": 0.107,
+        "TE012": 0.494,
+        "TE022": 0.130}
+    )
+
+    Clamshell2495Mag = CavityData(
+        radius=0.0460,
+        height=0.04,
+        modes={"TM010": 0.889365948}
+    )
 
 
 class PermResult:
@@ -96,8 +118,8 @@ class CavityPerturbationResult:
 
 
 def analyse(
-    sample_tdms_file, empty_tdms_file, cavity_volume, sample_volume, temp_correct=True
-) -> dict[str, CavityPerturbationResult]:
+    sample_tdms_file, empty_tdms_file, cavity, sample_radius, temp_correct=True, use_modes=None
+): #-> dict[str, CavityPerturbationResult]:
 
     sample_modes = []
     temp_correct_modes = []
@@ -110,22 +132,31 @@ def analyse(
         if re.search(".*_t", group.name):
             temp_correct_modes.append(group)
         else:
-            sample_modes.append(group)
+            if use_modes is not None:
+                if group.name in use_modes:
+                    sample_modes.append(group)
+            else:
+                sample_modes.append(group)
 
     if temperature is None:
         raise Exception("No temp series in TDMS file")
 
+
     results = {}
+    input_data = {}
     for mode in sample_modes:
         empty_f0 = np.average(empty_tdms_file[mode.name]["F0 (Hz)"][:])
         empty_q0 = np.average(empty_tdms_file[mode.name]["Q0"][:])
 
         f = mode["F0 (Hz)"][:]
-        f_correction_mode = temp_correct_modes[0]["F0 (Hz)"][:]
         q = mode["Q0"][:]
-        mode_volume = MODE_VOLUMES[mode.name]
+        mode_volume = cavity.modes[mode.name]
+        cavity_volume = cavity.volume()
+        sample_volume = cavity.sample_volume(sample_radius)
 
-        f_corrected = temperature_correct_f(temperature, f, f_correction_mode)
+        if temp_correct:
+            f_correction_mode = temp_correct_modes[0]["F0 (Hz)"][:]
+            f_corrected = temperature_correct_f(temperature, f, f_correction_mode)
 
         sample_real_perm = real_perm(
             mode_volume, cavity_volume, sample_volume, empty_f0,
@@ -148,5 +179,9 @@ def analyse(
             (empty_f0 - f) / empty_f0,
             (1 / q) - (1 / empty_q0),
         )
+        input_data[mode.name] = {
+            "f": f,
+            "q": q
+        }
 
-    return results
+    return (results, input_data)
