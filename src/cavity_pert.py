@@ -1,7 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import re
+import pandas as pd
 from dataclasses import dataclass
+from typing import Self
 
 from pandas.io.formats.format import math
 
@@ -72,6 +74,43 @@ class PermResult:
         self.mean = np.mean(data)
         self.max = np.max(data)
         self.min = np.min(data)
+
+@dataclass
+class ModeData:
+    name: str
+    frequency: np.typing.ArrayLike
+    q: np.typing.ArrayLike
+
+@dataclass
+class CavityPerturbationMeasurement:
+    measurement_modes: list[ModeData]
+    temperature_modes: list[ModeData]
+    temperature: np.ndarray
+    frequency: np.ndarray
+
+    @classmethod
+    def from_tdms(cls, filepath) -> Self:
+        return cls()
+
+    @classmethod
+    def from_csv(cls, filepath) -> Self:
+        df = pd.read_csv(filepath)
+        # extract modes from column headers
+        f_regex = re.compile(r"Frequency ([\w\d\-\_]*)\/Hz")
+        regexed = [f_regex.match(col) for col in df.columns]
+        modes = [result.group(1) for result in regexed if result]
+        print(modes)
+
+        # bisect on suffix to find temperature modes
+        standard_mode_names = [mode for mode in modes if mode[-1:-2] != "_t"]
+        temp_mode_names = [mode for mode in modes if mode[-1:-2] == "_t"]
+        print(standard_mode_names)
+        print(temp_mode_names)
+
+        # extract frequency series
+        # extract q series
+
+        return cls()
 
 
 class CavityPerturbationResult:
@@ -153,6 +192,7 @@ def analyse(
         mode_volume = cavity.modes[mode.name]
         cavity_volume = cavity.volume()
         sample_volume = cavity.sample_volume(sample_radius)
+        print(f"{mode.name=}, {mode_volume=}, {cavity_volume=}, {sample_volume=}")
 
         if temp_correct:
             f_correction_mode = temp_correct_modes[0]["F0 (Hz)"][:]

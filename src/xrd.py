@@ -1,4 +1,3 @@
-from copy import deepcopy
 from typing import Tuple
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
@@ -8,7 +7,7 @@ from matplotlib.axes import Axes
 from style import MARKERS, LINE_COLOURS
 import re
 from enum import Enum, auto
-from scipy.signal import find_peaks
+from uncertainties import ufloat, UFloat
 
 import scienceplots
 plt.style.use(["science"])
@@ -26,7 +25,7 @@ def read_ascii(filename):
         return lines.T
 
 class Compound:
-    def __init__(self, name: str, peak_theta2: np.ndarray, peak_intensity: np.ndarray, qty: np.float64 = 0.0):
+    def __init__(self, name: str, peak_theta2: np.ndarray, peak_intensity: np.ndarray, qty: UFloat = 0.0):
         # sorted by significance. makes filtering easier later
         pair = zip(peak_theta2, peak_intensity)
         by_significance = np.array(sorted(pair, key=lambda x: x[1], reverse=True))
@@ -84,7 +83,7 @@ class XRDSample:
         self.compounds = compounds
 
     @classmethod
-    def from_profex(cls, raw_data, peaks, composition=None):
+    def from_profex(cls, raw_data, peaks, composition=None, globals=None):
         angle, intensity = read_ascii(raw_data)
 
         peaks = pd.read_csv(peaks,
@@ -107,7 +106,25 @@ class XRDSample:
         # instead i'm just going to use the angle to look up the intensity at
         # the closest point in the raw data.
         # unreadable! but hey it's technically a one liner so that means its good right?
-        if composition == None:
+        if globals != None:
+            globals = pd.read_csv(globals, dtype={
+                    "Parameter, Goal": str,
+                    "Value": np.float64,
+                    "ESD": np.float64
+                })
+            compounds = [
+                Compound(compound_name,
+                    peaks.loc[peaks["Phase"] == compound_name]["Angle (°2?)"],
+                    [intensity[(np.abs(angle - peak_angle)).argmin()]
+                         for peak_angle in
+                         peaks.loc[peaks["Phase"] == compound_name]["Angle (°2?)"]],
+                    100 * ufloat(globals.loc[globals["Parameter, Goal"] == f"Q{compound_name}"]["Value"].iloc[0],
+                                 globals.loc[globals["Parameter, Goal"] == f"Q{compound_name}"]["ESD"].iloc[0]))
+                for compound_name in compound_names]
+
+            print(compounds)
+
+        elif composition == None:
             compounds = [
                 Compound(compound_name,
                     peaks.loc[peaks["Phase"] == compound_name]["Angle (°2?)"],
@@ -455,6 +472,7 @@ def xrd_multibar(
         ax.bar_label(b, label_type="center", fmt=lambda x: f"\\ce{{{phase}}}\n{x:.0f}\\%" if x > 0 else "", color="white", size="x-large")
 
         bottom += qtys
-                      
+
+
     return fig, ax
 
